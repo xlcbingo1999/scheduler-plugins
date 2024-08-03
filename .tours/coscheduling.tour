@@ -1,0 +1,322 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "coscheduling",
+  "steps": [
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "Coscheduling主要实现调度阶段的六个部分：\n\n- QueueSort\n- PreFilter\n- PostFilter\n- Permit\n- Reserve\n- EnqueExtensions",
+      "line": 42
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "QueueSort的实现：需要实现的接口只有一个Less函数，Less(*QueuedPodInfo, *QueuedPodInfo) bool，返回true的pod优先级更高\n\nQueuedPodInfo is a Pod wrapper with additional information related to the pod's status in the scheduling queue, such as the timestamp when it's added to the queue.\n\n原理可以参照: https://developer.aliyun.com/article/756016\n\n核心的思想就是让同一个group中的pod尽可能放在一起，避免出现死锁问题【即不同group的pod混合调度上去，导致某些group只能局部被调度，此时就会因为大量的group都只有局部调度而导致整体资源利用率变得很低】",
+      "line": 124
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "最新一次Pod进入队列的时间，因为pod可能会多次进来",
+      "line": 173
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "第一次pod进入队列的时间，这个很关键，可以对pod在整个调度流程中的时间进行一次完整的计算",
+      "line": 178
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "获取pod失败是在哪个阶段",
+      "line": 180
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "优先级调度，从pod.Spec.Priority读取优先级，然后高优的排前面",
+      "line": 128
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "coscheduling需要用一个函数来获取pod的creationTime，此时需要传入pod的InitialAttemptTimestamp 【Pod第一次添加到调度队列的时间，Pod调度成功前可能会多次加回队列，这个变量可以用来计算Pod的调度延迟（即从Pod入队到最终调度成功所用时间）】",
+      "line": 131
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "如果这个pod没有带着group，就返回pod的第一次入队列时间",
+      "line": 249
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "同上，API server没有返回pod的group时，应该返回的是pod的第一次入队列时间",
+      "line": 253
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "如果pod有group，应该返回pod group被创建的时间。一般来说，pod group被创建的时间要早于pod被入队列的时间。那么在这种设计模式之下，pod group管理的pod要比普通的pod更容易被调度上去哦！",
+      "line": 255
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "如果时间是相等的，这里主要考虑的场景是：\n\n- 两个pod是同属于一个gang的\n\n此时让(ns/name)字典序更靠前的pod先调度（有点DAG的感觉了）",
+      "line": 133
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "创建时间更早的pod理应更早调度",
+      "line": 135
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "第二个plugin实现的是PreFilter，主要进行 pod 预处理和检查，不符合预期就提前结束调度",
+      "line": 50
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/interface.go",
+      "description": "最重要就是实现这个函数，\n\nPreFilter 是调度周期开始时的一个阶段。所有 PreFilter 插件都必须返回成功，否则该 pod 将被拒绝。PreFilter 可以选择返回 PreFilterResult 来影响下游评估的节点。这对于在 O(1) 时间内确定要处理的节点子集的情况非常有用。当返回 Skip 状态时，返回的 PreFilterResult 和其他状态字段将被忽略，并且耦合的 Filter  plugin/PreFilterExtensions() 在本次调度周期中将跳过。\n",
+      "line": 359
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "压栈调用",
+      "line": 144
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "如果这个group被标记了backedOff，此时就失败了，直接返回失败。外层实现中，PreFilter阶段返回的Error会直接赋予pod UnschedulableAndUnresolvable阶段，这个的含义是pod可能连其他postFilter插件抢占也无法使得这个pod被调度起来",
+      "line": 169
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "这个就是coscheduler的一个特点，如果pod的数量还没到group的最小MinMember数量的时候，是直接再PreFilter阶段结束调度的",
+      "line": 180
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "coscheduling是存在Resources判断的，如果没有设置资源要求，此时就结束判断了",
+      "line": 185
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "这里是一个快速剪枝的逻辑，如果coscheduling上permittedPG已经包含了当前的group，此时说明在preFilter阶段，已经把group的资源需求判断好了，不再需要进行第二次判断",
+      "line": 192
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "判断pg的资源要求",
+      "line": 203
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "遍历每个node，然后调用函数去获取节点的资源",
+      "line": 304
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "如果pod是在node的信息上的，还需要把pod的信息remove掉？",
+      "line": 334
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "allocatable是一个显式的剩余资源量",
+      "line": 340
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "requested是获取这个node目前已经被请求的资源量，包含了assume pod的请求资源（即已经完成调度阶段，但是还没有bind到node的那些pod）",
+      "line": 341
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "维护的是node还允许的pod数量",
+      "line": 343
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "这里获取的是剩余的资源量",
+      "line": 357
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "这里是说，如果所有请求的资源都能满足，就返回error为nil",
+      "line": 314
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "resourceRequest保存的是当前pod group和可用资源的一个gap，如果无法完成调度就把这个gap返回出来！",
+      "line": 317
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "如果满足了资源判断，这个时候就要把当前的group加入到permittedPG",
+      "line": 208
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "如果PreFilter阶段出现任何的错误，pod的调度是要被打上UnschedulableAndUnresolvable，避免这个pod去抢占别的pod（当pod调度失败后，会在PostFilter扩展点执行抢占流程）",
+      "line": 146
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "如果没有出错就顺利完成PreFilter阶段",
+      "line": 148
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "PreFilterExtensions()不做任何实现",
+      "line": 200
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "coscheduling需要实现的第三个组件是PostFilter",
+      "line": 51
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/interface.go",
+      "description": "注意：如果 Filter 阶段之后，所有 nodes 都被筛掉了，一个都没剩，才会执行这个阶段；否则不会执行这个阶段的 plugins。\n\nPostFilter需要实现一个函数，通过这个函数之后如果某个Pod被设置为Success，这个时候就可以逆转Filter阶段的结果（一般是抢占别的Pod实现的）",
+      "line": 406
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "理论上来说，如果一个调度器没有时间某些插件的时候，那个插件应该是直接不生效的。\n在coscheduling中，Filter插件是没有被实现的，PreFilter之后就马上进入这里了。 \n为什么不去实现Filter呢？",
+      "line": 153
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "同样的，如果pod数量已经满足了，就让当前pod不再调度了",
+      "line": 165
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "IterateOverWaitingPods函数可以对pod在permit阶段处于waiting的pod进行处理\n需要把处于waiting的pod提取出来，如果是属于当前group的pod，就进行一次reject",
+      "line": 178
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "PodGroupBackoffSeconds is the backoff time in seconds before a pod group can be scheduled again.\n\n此时如果backoff了，pod group会在preFilter阶段被拦截下来，backoffPG的实现是一个go-cache，设置默认过期时间10秒钟，每10秒钟清除过期项。所以，如果pod group被在这个阶段设置为backoff，会尝试10秒钟内不进行重新的调度。",
+      "line": 190
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "可以看到内部的实现中，每次会获取暂停剩余的时间，如果剩余为0就不管了，如果还有剩余时间，就接着用剩余时间设置缓存，实现方案类似Redis",
+      "line": 110
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "当完成整个PostFilter阶段时，需要删除permittedPG，这是一个在preFilter阶段快速判断pod可以调度的一个cache，删除了的话pod就需要再进行一次全部nodes的检查",
+      "line": 194
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "Coscheduling都没有抢占实现，如果无法找到合适的node都是直接结束的",
+      "line": 196
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "第四个实现是Permit模块",
+      "line": 52
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/interface.go",
+      "description": "在Binding一个pod之前会执行这个permit函数，可以用来决定pod是否放行调度，还是要让pod wait一段时间，或者直接reject掉",
+      "line": 494
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "压栈具体的实现逻辑",
+      "line": 207
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "返回的是pod的状态",
+      "line": 213
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "如果之前已经上去的pod加上自己都已经超过了MinMember就放行",
+      "line": 227
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "因为现在pod已经走到了permit阶段，此时group所需的资源都是可以满足的，但是此时没有任何的pod已经被调度，这里再手动触发一下这些pod重新进入ActiveQ中，让他们可以快速被唤醒重新调度\n\n在这个代码片段中，调度器检查变量assigned是否为0。如果assigned为0，那么说明这个Pod已经满足了最小成员和最小资源等条件，可以被分配给一个节点。但是，调度器在这里做了一个判断，如果assigned为0，那么它会将一个PermitState对象写入到state中，这个对象的Activate字段设置为true。这个操作的目的是为了触发这个Pod的兄弟Pod（即属于同一个Service的Pod）的激活。\n\n这个判断的目的是为了避免在某些情况下，调度器会无条件地触发兄弟Pod的激活，从而导致效率降低。这种情况下，调度器可能会在满足最小资源条件之前就触发激活，从而导致资源分配不均等问题。\n\n因此，这个代码片段的目的是在满足最小资源条件后，确保调度器只触发一次兄弟Pod的激活，从而提高效率。",
+      "line": 239
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "如果没有足量的pod到达，还是处于wait阶段",
+      "line": 242
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "此时pod不是group控制的",
+      "line": 211
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "此时可能的pod group还没创建好，但是pod上面却有了group的label的场景",
+      "line": 213
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "获取实际的等待时间",
+      "line": 217
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "这里是快速唤醒调度的逻辑，只有在当前没有任何的pod完成调度时才会触发一次。",
+      "line": 222
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "这里是把group中的所有pod都拿出来，不管有没有完成调度",
+      "line": 128
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "把当前pod排除在外，因为当前pod刚从activeQ中出来被执行",
+      "line": 138
+    },
+    {
+      "file": "pkg/coscheduling/core/core.go",
+      "description": "这里是k8s调度框架提供的一个map，只要把pod放到里面来，之后k8s会拉平，将pod放到ActiveQ中",
+      "line": 145
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "放行阶段，会用IterateOverWaitingPods句柄，将之前在permit阶段被wait住的pod都拿出来，然后手动进行一次Allow，这是k8s提供的非常好用的接口！",
+      "line": 228
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "waitTime指的是处于waiting阶段的pod被k8s调度框架reject的timeout，这里可以由用户在pod上指定，或者在coscheduling阶段被指定",
+      "line": 236
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "第五个组件是Reserve组件，Informational，维护 plugin 状态信息",
+      "line": 53
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/interface.go",
+      "description": "用来避免 scheduler 等待 bind 操作结束期间，因 竞争条件 导致的错误。 只有当所有 Reserve plugins 都成功后，才会进入下一阶段，否则 scheduling cycle 就中止了。\n\n\nReserve 方法：在 Kubernetes 调度过程中，当一个 Pod 通过 Filter 和 Score 阶段后，会被分配到某个节点上。在分配过程中，调度器会调用 Reserve 方法。Reserve 方法的主要作用是锁定该节点上的资源，防止其他 Pod 占用这些资源。如果 Reserve 方法返回失败状态，那么调度器会取消对这个 Pod 的分配，并释放已锁定的资源，调度器将调用所有启用的ReservePlugin的Unreserve方法。\n\n\n\n",
+      "line": 455
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/interface.go",
+      "description": "Unreserve 方法：当一个 Pod 分配失败或者在后续阶段中被取消分配时，调度器会调用 Unreserve 方法。Unreserve 方法的主要作用是释放之前锁定 的资源，以便这些资源可以被其他 Pod 使用。\n\n在实现 ReservePlugin 时，需要确保 Unreserve 方法具有幂等性，即多次调用同一个方法对系统状态产生相同的影响。\n\n",
+      "line": 461
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "Reserve阶段永远不会报错？",
+      "line": 241
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "Unreserve操作就是把permit时处于waiting的pod都reject掉，因为此时reserve失败了，group里面的某个pod调度不下去了",
+      "line": 253
+    },
+    {
+      "file": "pkg/coscheduling/coscheduling.go",
+      "description": "删除pod group对当前资源充足的信号，说明此时集群资源不充足了",
+      "line": 256
+    }
+  ],
+  "ref": "v0.28.9"
+}
