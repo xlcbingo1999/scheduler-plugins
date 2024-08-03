@@ -1,0 +1,197 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "scheduler-framework",
+  "steps": [
+    {
+      "file": "vendor/k8s.io/kubernetes/cmd/kube-scheduler/app/server.go",
+      "description": "启动函数从这里开始，这里是创建调度器的流程",
+      "line": 354
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/scheduler.go",
+      "description": "这里是创建一份调度时使用的缓存",
+      "line": 337
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "缓存会立即开始执行",
+      "line": 44
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "启动一个线程执行缓存，只会干一个事情，就是清理掉assume的pod（调度框架中有一个Reserve阶段，Reserve阶段通过的Pod才能继续进入Binding阶段，此时这些pod被称呼为assumePod）",
+      "line": 739
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "assumePod会在reserve阶段后得到一个deadline，超过了deadline就说明这次reserve结束，此时需要从cache中卸载下来",
+      "line": 761
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "如果已经完成了Binding，这个pod就不需要再缓存中进行处理了",
+      "line": 759
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "实际进行remove操作",
+      "line": 763
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "把pod从reserve阶段设置的缓存中的node信息中删除",
+      "line": 484
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "因为affinity会影响调度的流程，比如node上设置了对其他pod需要的亲和性，或者其他pod不能调度的反亲和性，这个时候node cache上面的内容需要删除",
+      "line": 748
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "这里的操作是，podsinfo数组的最后一个赋值到被删除的位置上，然后数组进行一次缩小",
+      "line": 763
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "更新node缓存中的资源、requested、ports、pcvref、generation中和被删除pod相关的内容",
+      "line": 765
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "1. 【ContainerPort vs. HostPort】这两个一般用在pod yaml描述文件中,起到的作用类似于docker -p选项\n\n- containerport: 容器需要暴露的端口，service的targetPort会映射到pod里的这个containerPort。\n- hostport: 容器暴露的端口映射到的物理机的主机端口，将pod的端口映射到宿主机上。\n\n2. 【Port vs. TargetPort】这两个一般用在service中，service 的类型为clusterIP时候: \n\n- port: service中clusterIP对应的端口\n- targetport: clusterIP作为负载均衡， 后端目标实例(容器)的端口。targetPort对应pod里的containerPort。\n\n3. 【NodePort】这一个一般用在service中\n\n- clusterIP 只能集群内部访问(源与目标需要满足两个条件: kube-proxy正常运行，跨主机容器网络通信正常)\n- nodeport会在每个kubelet节点的宿主机开启一个端口，用于应用集群外部访问。 \n\n4. hostport和nodeport的区别？\n\n- hostport是将pod的端口映射到宿主机上。\n- nodeport是将service的端口映射到集群中的每个宿主机上。\n\n5. 快速总结一下哪些端口和标签应该匹配：\n\n- Service selector 应该和 Pod 的标签匹配；\n- Service 的 targetPort 应该和 Pod 里面容器的 containerPort 匹配；\n- Service 端口可以是任意数字。多个 Service 可以使用同一个端口，因为不同的 Service 分配的 IP 地址不同；\n- Ingress 的 service.port 应该和 Service 的 port 匹配；\n- Service 的名称应该和 Ingress 中 service.name 字段匹配；",
+      "line": 790
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "这个函数只会处理pod上container中的hostPort",
+      "line": 854
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "需要更新pvc的绑定数量",
+      "line": 791
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "pvc是一种不随pod和node生命周期的资源，此时需要把当前节点上的pvc ref次数进行增减",
+      "line": 869
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/types.go",
+      "description": "如果node的亲和性、反亲和性和pods为空了，需要进行清除",
+      "line": 766
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "如果node上没有节点的逻辑",
+      "line": 488
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "在双向链表中把node删除掉",
+      "line": 167
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "如果被删除的是双向链表的头，需要更新头节点",
+      "line": 170
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "如果node上面还有pod，此时说明node是被更新的，需要把他放到双向链表的头部【类似LRU的实现，因为头部的node是最近被更新过的】",
+      "line": 490
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/internal/cache/cache.go",
+      "description": "这里的设计还是很不错的！",
+      "line": 149
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/scheduler.go",
+      "description": "这里是把InTreeRegistry创建出来",
+      "line": 276
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/scheduler.go",
+      "description": "然后将外部实现的OutofTreeRegistry注册进来",
+      "line": 277
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/plugins/registry.go",
+      "description": "配置featureGate",
+      "line": 49
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/plugins/registry.go",
+      "description": "queueSort的默认实现",
+      "line": 83
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/plugins/queuesort/priority_sort.go",
+      "description": "queueSort的默认实现是一个优先级调度",
+      "line": 50
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/plugins/registry.go",
+      "description": "defaultBinder的默认实现",
+      "line": 84
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/plugins/defaultbinder/default_binder.go",
+      "description": "默认的Bind实现就是创建一个Binding对象，提交给Apiserver",
+      "line": 58
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/plugins/registry.go",
+      "description": "注册了一个默认抢占策略，其实这里所有的内容都是一个调度算法的部分实现，不再过度看了",
+      "line": 85
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/runtime/registry.go",
+      "description": "把所有的OutofTree Registry都注册进来",
+      "line": 95
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/scheduler.go",
+      "description": "buildExtender, 可以把某些功能放在外部的http服务中",
+      "line": 283
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/scheduler.go",
+      "description": "这里是构建profiles",
+      "line": 294
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/profile/profile.go",
+      "description": "创建profile， 即调度策略",
+      "line": 55
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/profile/profile.go",
+      "description": "创建Framework",
+      "line": 42
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/runtime/framework.go",
+      "description": "这里就说明了profile就是一个调度策略的具体实现",
+      "line": 276
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/runtime/framework.go",
+      "description": "这里是把每个plugins都加入到framework的各个阶段中",
+      "line": 1531
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/framework/runtime/framework.go",
+      "description": "最后会返回一个pgSet出来",
+      "line": 1537
+    },
+    {
+      "file": "vendor/k8s.io/kubernetes/pkg/scheduler/scheduler.go",
+      "description": "构建调度队列",
+      "line": 320
+    }
+  ],
+  "ref": "v0.28.9-xlc"
+}
